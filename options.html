@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobFilter - Blacklisted Companies</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Blacklisted Companies</h1>
+      <p class="subtitle">
+        Add or remove companies you do not want to see in job search results.
+      </p>
+
+      <form id="add-form" class="add-form">
+        <label for="company-input">Company name</label>
+        <div class="add-row">
+          <input
+            id="company-input"
+            type="text"
+            placeholder="e.g. Example Corp"
+            autocomplete="off"
+            required
+          />
+          <button type="submit">Add</button>
+        </div>
+      </form>
+
+      <section class="list-section">
+        <div class="list-header">
+          <h2>Current blacklist</h2>
+          <button id="clear-all" class="danger" type="button">Clear all</button>
+        </div>
+        <p id="empty-state" class="empty-state">No companies blacklisted yet.</p>
+        <ul id="company-list" class="company-list"></ul>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
