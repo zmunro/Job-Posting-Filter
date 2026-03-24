@@ -2,7 +2,7 @@
   display: none !important;
 }
 
-.jf-blacklist-btn {
+.jf-blocklist-btn {
   margin-top: 8px;
   padding: 6px 10px;
   border: 1px solid #0a66c2;
@@ -15,12 +15,47 @@
   cursor: pointer;
 }
 
-.jf-blacklist-btn:hover {
+.jf-blocklist-btn:hover {
   background: #e8f3ff;
 }
 
-.jf-blacklist-btn:active {
+.jf-blocklist-btn:active {
   transform: translateY(1px);
+}
+
+/* Built In: sit above full-card job link overlay (.card-alias-after-overlay ::after) */
+.jf-builtin-btn-wrap {
+  position: relative;
+  z-index: 50;
+  isolation: isolate;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0;
+  margin-bottom: 10px;
+  pointer-events: auto;
+}
+
+.jf-builtin-btn-wrap .jf-blocklist-btn,
+.jf-blocklist-btn.jf-builtin-card-btn {
+  position: relative;
+  z-index: 51;
+  pointer-events: auto;
+}
+
+.jf-builtin-single-wrap {
+  position: relative;
+  z-index: 50;
+  isolation: isolate;
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  pointer-events: auto;
+}
+
+.jf-builtin-single-wrap .jf-blocklist-btn {
+  position: relative;
+  z-index: 51;
+  pointer-events: auto;
 }
 
 .jf-toast {

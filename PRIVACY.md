@@ -1,4 +1,4 @@
-# Privacy Policy for JobFilter - Company Blacklist
+# Privacy Policy for JobFilter - Company Blocklist
 
 Last updated: March 19, 2026
 
@@ -12,23 +12,25 @@ financial information, health information, or authentication credentials.
 
 ## Data Stored by the Extension
 
-The extension stores only a user-managed blacklist of company names in `chrome.storage.sync`
+The extension stores only a user-managed blocklist of company names in `chrome.storage.sync`
 so the list can persist across sessions and sync across the user's signed-in Chrome profile.
 
 ## How Data Is Used
 
-Company names in the blacklist are used solely to hide matching job postings on supported
-pages (currently LinkedIn Jobs).
+Company names in the blocklist are used solely to hide matching job postings on supported
+pages (LinkedIn Jobs and Built In job listings).
 
 ## Data Sharing
 
 JobFilter does not sell, transfer, or share user data with third parties.
-The extension does not send blacklist data or page content to external servers.
+The extension does not send blocklist data or page content to external servers.
 
 ## Website Access
 
-JobFilter requests host access to `https://www.linkedin.com/*` to detect job posting
-company names and apply user-selected filters on LinkedIn Jobs pages.
+JobFilter requests host access to LinkedIn (`https://www.linkedin.com/*`, `https://linkedin.com/*`)
+and Built In (`https://builtin.com/*`, `https://www.builtin.com/*`, and `https://*.builtin.com/*` for
+regional sites) to read company names shown on job listings and apply the user’s blocklist locally
+in the page.
 
 ## Changes to This Policy
 

@@ -1,4 +1,6 @@
-const STORAGE_KEY = "blacklistedCompanies";
+const STORAGE_KEY = "blockedCompanies";
+const LEGACY_STORAGE_KEY = "blacklistedCompanies";
+
 const countText = document.getElementById("count-text");
 const manageButton = document.getElementById("manage-button");
 const statusText = document.getElementById("status-text");
@@ -18,17 +20,30 @@ function uniqueSortedCompanies(items) {
   return [...map.values()].sort((a, b) => a.localeCompare(b));
 }
 
-function readBlacklist() {
+function readBlockedList() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get({ [STORAGE_KEY]: [] }, (result) => {
-      const list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
-      resolve(uniqueSortedCompanies(list));
-    });
+    chrome.storage.sync.get(
+      { [STORAGE_KEY]: [], [LEGACY_STORAGE_KEY]: [] },
+      (result) => {
+        let list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+        const legacy = Array.isArray(result[LEGACY_STORAGE_KEY])
+          ? result[LEGACY_STORAGE_KEY]
+          : [];
+        if (legacy.length) {
+          list = uniqueSortedCompanies([...list, ...legacy]);
+          chrome.storage.sync.set({
+            [STORAGE_KEY]: list,
+            [LEGACY_STORAGE_KEY]: []
+          });
+        }
+        resolve(uniqueSortedCompanies(list));
+      }
+    );
   });
 }
 
 function updateCount(count) {
-  countText.textContent = `${count} compan${count === 1 ? "y" : "ies"} blacklisted`;
+  countText.textContent = `${count} compan${count === 1 ? "y" : "ies"} on blocklist`;
 }
 
 function setStatus(text, className) {
@@ -64,8 +79,9 @@ async function updateStatusBadge() {
   }
 
   const url = tab.url || "";
-  if (!/^https:\/\/www\.linkedin\.com\//.test(url)) {
-    setStatus("Status: open a LinkedIn tab", "status-warn");
+  const supported = /^https:\/\/(www\.)?(linkedin\.com|builtin\.com)\//i.test(url);
+  if (!supported) {
+    setStatus("Status: open LinkedIn or Built In", "status-warn");
     return;
   }
 
@@ -76,17 +92,21 @@ async function updateStatusBadge() {
   }
 
   if (!status.onJobsPage) {
-    setStatus("Status: LinkedIn open (not on Jobs page)", "status-warn");
+    const onBi = status.onBuiltin || status.site === "builtin";
+    const label = onBi ? "Built In" : "LinkedIn";
+    setStatus(`Status: ${label} open (not on a job page)`, "status-warn");
     return;
   }
 
   if (!status.jobsFeaturesActive) {
-    setStatus("Status: Jobs detected, initializing...", "status-warn");
+    setStatus("Status: job page detected, initializing...", "status-warn");
     return;
   }
 
   if (status.buttonVisible) {
-    setStatus("Status: active on LinkedIn Jobs", "status-ok");
+    const onBi = status.onBuiltin || status.site === "builtin";
+    const label = onBi ? "Built In" : "LinkedIn";
+    setStatus(`Status: active on ${label} jobs`, "status-ok");
     return;
   }
 
@@ -95,11 +115,11 @@ async function updateStatusBadge() {
     return;
   }
 
-  setStatus("Status: active, waiting for selected job", "status-warn");
+  setStatus("Status: active, waiting for job UI", "status-warn");
 }
 
 async function initializePopup() {
-  const list = await readBlacklist();
+  const list = await readBlockedList();
   updateCount(list.length);
   await updateStatusBadge();
 }
@@ -109,11 +129,13 @@ manageButton.addEventListener("click", () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || !changes[STORAGE_KEY]) {
+  if (areaName !== "sync") {
     return;
   }
-  const list = Array.isArray(changes[STORAGE_KEY].newValue) ? changes[STORAGE_KEY].newValue : [];
-  updateCount(uniqueSortedCompanies(list).length);
+  if (!changes[STORAGE_KEY] && !changes[LEGACY_STORAGE_KEY]) {
+    return;
+  }
+  readBlockedList().then((list) => updateCount(list.length));
 });
 
 initializePopup();

@@ -1,10 +1,14 @@
 (function initJobFilter() {
-  const STORAGE_KEY = "blacklistedCompanies";
-  const BUTTON_ID = "jf-blacklist-current-company";
+  const STORAGE_KEY = "blockedCompanies";
+  const LEGACY_STORAGE_KEY = "blacklistedCompanies";
+  const BUTTON_ID = "jf-blocklist-current-company";
+  const BUILTIN_SINGLE_BTN_ID = "jf-builtin-blocklist-single";
   const HIDDEN_CLASS = "jf-hidden-job";
+  const BUILTIN_BTN_WRAP = "jf-builtin-btn-wrap";
+  const BUILTIN_CARD_BTN_CLASS = "jf-builtin-card-btn";
 
   /** @type {Set<string>} */
-  let blacklistSet = new Set();
+  let blockedSet = new Set();
   let toastTimer = null;
   let refreshTimer = null;
   let jobsFeaturesActive = false;
@@ -18,18 +22,31 @@
     return (name || "").trim().replace(/\s+/g, " ");
   }
 
-  async function readBlacklist() {
+  async function readBlockedList() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get({ [STORAGE_KEY]: [] }, (result) => {
-        const list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
-        resolve(list);
-      });
+      chrome.storage.sync.get(
+        { [STORAGE_KEY]: [], [LEGACY_STORAGE_KEY]: [] },
+        (result) => {
+          let list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+          const legacy = Array.isArray(result[LEGACY_STORAGE_KEY])
+            ? result[LEGACY_STORAGE_KEY]
+            : [];
+          if (legacy.length) {
+            list = uniqueSorted([...list, ...legacy]);
+            chrome.storage.sync.set({
+              [STORAGE_KEY]: list,
+              [LEGACY_STORAGE_KEY]: []
+            });
+          }
+          resolve(list);
+        }
+      );
     });
   }
 
-  async function writeBlacklist(blacklist) {
+  async function writeBlockedList(companies) {
     return new Promise((resolve) => {
-      chrome.storage.sync.set({ [STORAGE_KEY]: blacklist }, () => resolve());
+      chrome.storage.sync.set({ [STORAGE_KEY]: companies }, () => resolve());
     });
   }
 
@@ -58,8 +75,8 @@
       clearTimeout(refreshTimer);
     }
     refreshTimer = setTimeout(() => {
-      hideBlacklistedJobs();
-      ensureBlacklistButton();
+      hideBlockedJobs();
+      ensureBlocklistButton();
     }, 120);
   }
 
@@ -78,24 +95,24 @@
     return [...uniq.values()].sort((a, b) => a.localeCompare(b));
   }
 
-  async function addCompanyToBlacklist(companyName) {
+  async function addCompanyToBlocklist(companyName) {
     const display = toDisplayName(companyName);
     const normalized = normalizeCompanyName(display);
     if (!normalized) {
       return false;
     }
-    if (blacklistSet.has(normalized)) {
-      showToast(`${display} is already in your blacklist.`);
+    if (blockedSet.has(normalized)) {
+      showToast(`${display} is already on your blocklist.`);
       return false;
     }
 
-    const existing = await readBlacklist();
+    const existing = await readBlockedList();
     const updated = uniqueSorted([...existing, display]);
-    await writeBlacklist(updated);
-    blacklistSet = new Set(updated.map(normalizeCompanyName));
-    hideBlacklistedJobs();
-    ensureBlacklistButton();
-    showToast(`Added "${display}" to blacklist.`);
+    await writeBlockedList(updated);
+    blockedSet = new Set(updated.map(normalizeCompanyName));
+    hideBlockedJobs();
+    ensureBlocklistButton();
+    showToast(`Added "${display}" to blocklist.`);
     return true;
   }
 
@@ -153,7 +170,41 @@
     return cards;
   }
 
-  function hideBlacklistedJobs() {
+  function getJobsSite() {
+    const host = window.location.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "linkedin.com" || host.endsWith(".linkedin.com")) {
+      return "linkedin";
+    }
+    if (host === "builtin.com" || host.endsWith(".builtin.com")) {
+      return "builtin";
+    }
+    return "other";
+  }
+
+  function hideBuiltinJobCards() {
+    const cards = document.querySelectorAll('[data-id="job-card"]');
+    for (const card of cards) {
+      if (!(card instanceof HTMLElement)) {
+        continue;
+      }
+      const link = card.querySelector('a[data-id="company-title"]');
+      const company = link ? toDisplayName(link.textContent) : "";
+      const normalized = normalizeCompanyName(company);
+      if (normalized && blockedSet.has(normalized)) {
+        card.classList.add(HIDDEN_CLASS);
+      } else {
+        card.classList.remove(HIDDEN_CLASS);
+      }
+    }
+  }
+
+  function hideBlockedJobs() {
+    const site = getJobsSite();
+    if (site === "builtin") {
+      hideBuiltinJobCards();
+      return;
+    }
+
     const cards = collectJobCards();
     for (const card of cards) {
       const company = toDisplayName(getCardCompanyText(card));
@@ -164,7 +215,7 @@
         continue;
       }
 
-      if (normalized && blacklistSet.has(normalized)) {
+      if (normalized && blockedSet.has(normalized)) {
         target.classList.add(HIDDEN_CLASS);
       } else {
         target.classList.remove(HIDDEN_CLASS);
@@ -251,7 +302,154 @@
     return companyElement.parentElement instanceof HTMLElement ? companyElement.parentElement : null;
   }
 
-  function ensureBlacklistButton() {
+  function removeLinkedInBlocklistButton() {
+    const existing = document.getElementById(BUTTON_ID);
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  function removeBuiltinUi() {
+    document.querySelectorAll(`.${BUILTIN_BTN_WRAP}`).forEach((el) => el.remove());
+    const single = document.getElementById(BUILTIN_SINGLE_BTN_ID);
+    if (single) {
+      single.remove();
+    }
+    const singleWrap = document.querySelector(".jf-builtin-single-wrap");
+    if (singleWrap) {
+      singleWrap.remove();
+    }
+  }
+
+  function ensureBuiltinCardButtons() {
+    const cards = document.querySelectorAll('[data-id="job-card"]');
+    for (const card of cards) {
+      if (!(card instanceof HTMLElement)) {
+        continue;
+      }
+      const companyLink = card.querySelector('a[data-id="company-title"]');
+      if (!companyLink) {
+        continue;
+      }
+      const name = toDisplayName(companyLink.textContent);
+      if (!name) {
+        continue;
+      }
+
+      let wrap = card.querySelector(`.${BUILTIN_BTN_WRAP}`);
+      let button = wrap?.querySelector(`.${BUILTIN_CARD_BTN_CLASS}`);
+      if (!wrap || !button) {
+        wrap = document.createElement("div");
+        wrap.className = BUILTIN_BTN_WRAP;
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = `jf-blocklist-btn ${BUILTIN_CARD_BTN_CLASS}`;
+        wrap.appendChild(button);
+        // Right column is outside the full-card job link overlay (card-alias-after-overlay).
+        const metaSection = card.querySelector(".bounded-attribute-section");
+        if (metaSection) {
+          metaSection.insertBefore(wrap, metaSection.firstChild);
+        } else {
+          const item2 = card.querySelector(".left-side-tile-item-2");
+          if (item2) {
+            item2.insertAdjacentElement("afterend", wrap);
+          } else {
+            const tile = card.querySelector(".left-side-tile");
+            if (tile) {
+              tile.appendChild(wrap);
+            } else {
+              card.appendChild(wrap);
+            }
+          }
+        }
+      } else {
+        const metaSection = card.querySelector(".bounded-attribute-section");
+        if (metaSection && !metaSection.contains(wrap)) {
+          metaSection.insertBefore(wrap, metaSection.firstChild);
+        }
+      }
+
+      const normalized = normalizeCompanyName(name);
+      const isBlocked = normalized && blockedSet.has(normalized);
+      button.disabled = Boolean(isBlocked);
+      button.textContent = isBlocked ? "Company blocked" : `Hide "${name}" jobs`;
+      const companyForClick = name;
+      if (!button.dataset.jfBuiltinBound) {
+        button.dataset.jfBuiltinBound = "1";
+        button.addEventListener(
+          "click",
+          async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            const btn = e.currentTarget;
+            if (!(btn instanceof HTMLButtonElement) || btn.disabled) {
+              return;
+            }
+            await addCompanyToBlocklist(companyForClick);
+          },
+          true
+        );
+      }
+    }
+  }
+
+  function ensureBuiltinSingleJobButton() {
+    if (!/^\/job\//.test(window.location.pathname)) {
+      return;
+    }
+    const companyLink =
+      document.querySelector('main a[data-id="company-title"]') ||
+      document.querySelector('a[data-id="company-title"]');
+    if (!companyLink || !(companyLink instanceof HTMLElement)) {
+      return;
+    }
+    const name = toDisplayName(companyLink.textContent);
+    if (!name) {
+      return;
+    }
+
+    let wrap = document.querySelector(".jf-builtin-single-wrap");
+    let button = document.getElementById(BUILTIN_SINGLE_BTN_ID);
+    if (!wrap || !button) {
+      if (wrap) {
+        wrap.remove();
+      }
+      wrap = document.createElement("div");
+      wrap.className = "jf-builtin-single-wrap";
+      button = document.createElement("button");
+      button.id = BUILTIN_SINGLE_BTN_ID;
+      button.type = "button";
+      button.className = "jf-blocklist-btn";
+      wrap.appendChild(button);
+      companyLink.insertAdjacentElement("afterend", wrap);
+    }
+
+    const normalized = normalizeCompanyName(name);
+    const isBlocked = normalized && blockedSet.has(normalized);
+    button.disabled = Boolean(isBlocked);
+    button.textContent = isBlocked ? "Company is blocked" : `Hide "${name}" jobs`;
+    const companyForClick = name;
+    if (!button.dataset.jfBuiltinSingleBound) {
+      button.dataset.jfBuiltinSingleBound = "1";
+      button.addEventListener(
+        "click",
+        async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          const btn = e.currentTarget;
+          if (!(btn instanceof HTMLButtonElement) || btn.disabled) {
+            return;
+          }
+          await addCompanyToBlocklist(companyForClick);
+        },
+        true
+      );
+    }
+  }
+
+  function ensureLinkedInBlocklistButton() {
     const detail = getCurrentDetailCompany();
     const existing = document.getElementById(BUTTON_ID);
 
@@ -268,7 +466,7 @@
     }
 
     const normalized = normalizeCompanyName(detail.name);
-    const isBlocked = normalized && blacklistSet.has(normalized);
+    const isBlocked = normalized && blockedSet.has(normalized);
     let button = existing;
     if (!button) {
       button = document.createElement("button");
@@ -279,12 +477,12 @@
 
     button.id = BUTTON_ID;
     button.type = "button";
-    button.className = "jf-blacklist-btn";
+    button.className = "jf-blocklist-btn";
     button.disabled = Boolean(isBlocked);
-    button.textContent = isBlocked ? "Company is blacklisted" : `Hide "${detail.name}" jobs`;
+    button.textContent = isBlocked ? "Company is blocked" : `Hide "${detail.name}" jobs`;
 
     button.onclick = async () => {
-      await addCompanyToBlacklist(detail.name);
+      await addCompanyToBlocklist(detail.name);
     };
 
     const inTopButtons = container.classList.contains("job-details-jobs-unified-top-card__top-buttons");
@@ -292,15 +490,45 @@
     button.style.marginLeft = inTopButtons ? "8px" : "0";
   }
 
+  function ensureBlocklistButton() {
+    const site = getJobsSite();
+    if (site === "builtin") {
+      removeLinkedInBlocklistButton();
+      const path = window.location.pathname;
+      if (/^\/jobs(\/|$)/.test(path)) {
+        document.getElementById(BUILTIN_SINGLE_BTN_ID)?.remove();
+        document.querySelector(".jf-builtin-single-wrap")?.remove();
+        ensureBuiltinCardButtons();
+      } else if (/^\/job\//.test(path)) {
+        document.querySelectorAll(`.${BUILTIN_BTN_WRAP}`).forEach((el) => el.remove());
+        ensureBuiltinSingleJobButton();
+      } else {
+        removeBuiltinUi();
+      }
+      return;
+    }
+
+    removeBuiltinUi();
+    ensureLinkedInBlocklistButton();
+  }
+
   async function initialLoad() {
-    const list = await readBlacklist();
-    blacklistSet = new Set(list.map(normalizeCompanyName));
-    hideBlacklistedJobs();
-    ensureBlacklistButton();
+    const list = await readBlockedList();
+    blockedSet = new Set(list.map(normalizeCompanyName));
+    hideBlockedJobs();
+    ensureBlocklistButton();
   }
 
   function isJobsPage() {
-    return /^\/jobs(\/|$)/.test(window.location.pathname);
+    const site = getJobsSite();
+    const path = window.location.pathname;
+    if (site === "linkedin") {
+      return /^\/jobs(\/|$)/.test(path);
+    }
+    if (site === "builtin") {
+      return /^\/jobs(\/|$)/.test(path) || /^\/job\//.test(path);
+    }
+    return false;
   }
 
   function activateJobsFeatures() {
@@ -323,10 +551,8 @@
       observer.disconnect();
       observer = null;
     }
-    const existing = document.getElementById(BUTTON_ID);
-    if (existing) {
-      existing.remove();
-    }
+    removeLinkedInBlocklistButton();
+    removeBuiltinUi();
   }
 
   function onRouteChange() {
@@ -366,30 +592,39 @@
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "sync" || !changes[STORAGE_KEY]) {
+    if (areaName !== "sync") {
       return;
     }
-    const newValue = Array.isArray(changes[STORAGE_KEY].newValue)
-      ? changes[STORAGE_KEY].newValue
-      : [];
-    blacklistSet = new Set(newValue.map(normalizeCompanyName));
-    if (jobsFeaturesActive) {
-      scheduleRefresh();
+    if (!changes[STORAGE_KEY] && !changes[LEGACY_STORAGE_KEY]) {
+      return;
     }
+    readBlockedList().then((list) => {
+      blockedSet = new Set(list.map(normalizeCompanyName));
+      if (jobsFeaturesActive) {
+        scheduleRefresh();
+      }
+    });
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== "jobfilter:getStatus") {
       return;
     }
+    const site = getJobsSite();
     const detail = getCurrentDetailCompany();
+    const builtinButtons =
+      document.querySelectorAll(`.${BUILTIN_CARD_BTN_CLASS}`).length +
+      (document.getElementById(BUILTIN_SINGLE_BTN_ID) ? 1 : 0);
     sendResponse({
       ok: true,
-      onLinkedIn: /(^|\.)linkedin\.com$/i.test(window.location.hostname),
+      site,
+      onLinkedIn: site === "linkedin",
+      onBuiltin: site === "builtin",
       onJobsPage: isJobsPage(),
       jobsFeaturesActive,
       currentCompany: detail ? detail.name : "",
-      buttonVisible: Boolean(document.getElementById(BUTTON_ID))
+      buttonVisible:
+        site === "builtin" ? builtinButtons > 0 : Boolean(document.getElementById(BUTTON_ID))
     });
   });
 

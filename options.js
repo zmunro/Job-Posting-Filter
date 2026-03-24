@@ -1,4 +1,5 @@
-const STORAGE_KEY = "blacklistedCompanies";
+const STORAGE_KEY = "blockedCompanies";
+const LEGACY_STORAGE_KEY = "blacklistedCompanies";
 
 const companyInput = document.getElementById("company-input");
 const addForm = document.getElementById("add-form");
@@ -29,18 +30,34 @@ function uniqueSortedCompanies(items) {
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
-function readBlacklist() {
+function readBlockedList() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get({ [STORAGE_KEY]: [] }, (result) => {
-      const list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
-      resolve(uniqueSortedCompanies(list));
-    });
+    chrome.storage.sync.get(
+      { [STORAGE_KEY]: [], [LEGACY_STORAGE_KEY]: [] },
+      (result) => {
+        let list = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+        const legacy = Array.isArray(result[LEGACY_STORAGE_KEY])
+          ? result[LEGACY_STORAGE_KEY]
+          : [];
+        if (legacy.length) {
+          list = uniqueSortedCompanies([...list, ...legacy]);
+          chrome.storage.sync.set({
+            [STORAGE_KEY]: list,
+            [LEGACY_STORAGE_KEY]: []
+          });
+        }
+        resolve(uniqueSortedCompanies(list));
+      }
+    );
   });
 }
 
-function writeBlacklist(companies) {
+function writeBlockedList(companies) {
   return new Promise((resolve) => {
-    chrome.storage.sync.set({ [STORAGE_KEY]: uniqueSortedCompanies(companies) }, () => resolve());
+    chrome.storage.sync.set(
+      { [STORAGE_KEY]: uniqueSortedCompanies(companies) },
+      () => resolve()
+    );
   });
 }
 
@@ -62,10 +79,10 @@ function renderList(companies) {
     remove.className = "remove-btn";
     remove.textContent = "Remove";
     remove.addEventListener("click", async () => {
-      const current = await readBlacklist();
+      const current = await readBlockedList();
       const normalized = normalizeCompanyName(company);
       const next = current.filter((entry) => normalizeCompanyName(entry) !== normalized);
-      await writeBlacklist(next);
+      await writeBlockedList(next);
       renderList(next);
     });
 
@@ -75,7 +92,7 @@ function renderList(companies) {
 }
 
 async function initializePage() {
-  const companies = await readBlacklist();
+  const companies = await readBlockedList();
   renderList(companies);
 }
 
@@ -86,29 +103,31 @@ addForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  const current = await readBlacklist();
+  const current = await readBlockedList();
   const updated = uniqueSortedCompanies([...current, company]);
-  await writeBlacklist(updated);
+  await writeBlockedList(updated);
   renderList(updated);
   companyInput.value = "";
   companyInput.focus();
 });
 
 clearAllButton.addEventListener("click", async () => {
-  const confirmed = window.confirm("Remove all companies from the blacklist?");
+  const confirmed = window.confirm("Remove all companies from your blocklist?");
   if (!confirmed) {
     return;
   }
-  await writeBlacklist([]);
+  await writeBlockedList([]);
   renderList([]);
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || !changes[STORAGE_KEY]) {
+  if (areaName !== "sync") {
     return;
   }
-  const list = Array.isArray(changes[STORAGE_KEY].newValue) ? changes[STORAGE_KEY].newValue : [];
-  renderList(uniqueSortedCompanies(list));
+  if (!changes[STORAGE_KEY] && !changes[LEGACY_STORAGE_KEY]) {
+    return;
+  }
+  readBlockedList().then((list) => renderList(list));
 });
 
 initializePage();

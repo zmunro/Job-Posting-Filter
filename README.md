@@ -4,11 +4,11 @@ JobFilter lets you hide jobs from companies you do not want to see.
 
 ## Features
 
-- LinkedIn support (`linkedin.com/jobs/*`)
-- "Hide jobs from this company" button on the currently selected job
-- Automatically hides any job cards from blacklisted companies
-- Blacklist manager page to add, remove, and clear companies
-- Popup menu with quick access to blacklist manager
+- **LinkedIn** — hide button on the selected job in the detail pane; list items hide when blocked
+- **Built In** (`builtin.com`) — hide button on each job card on `/jobs` (and on individual `/job/...` pages when the layout includes the company link)
+- Same shared blocklist everywhere (stored in `chrome.storage.sync` as `blockedCompanies`)
+- Options page to add, remove, and clear companies
+- Popup with status + quick link to manage the blocklist
 
 ## Install (Developer Mode)
 
@@ -19,13 +19,23 @@ JobFilter lets you hide jobs from companies you do not want to see.
 
 ## How to use
 
-1. Open LinkedIn jobs.
-2. Click a job posting.
-3. Click **Hide "<Company>" jobs** in the job detail panel.
-4. Future jobs from that company are hidden automatically.
-5. Click the extension icon -> **Manage blacklist** to edit blocked companies.
+### LinkedIn
+
+1. Open LinkedIn Jobs.
+2. Select a job so the detail panel loads.
+3. Click **Hide "<Company>" jobs** in the detail panel.
+
+### Built In
+
+1. Open [Built In Jobs](https://builtin.com/jobs) (or search/filter as usual).
+2. On each job card, click **Hide "<Company>" jobs** under the company name.
+3. Cards from that company disappear from the list.
+
+### Blocklist
+
+- Extension icon → **Manage blocklist** to edit entries (applies to both sites).
 
 ## Notes
 
-- Blacklist data is stored in `chrome.storage.sync`.
-- If LinkedIn changes markup, selectors in `content.js` may need updates.
+- Blocklist data is stored in `chrome.storage.sync` under `blockedCompanies` (older installs may migrate once from `blacklistedCompanies`).
+- If either site changes markup, selectors in `content.js` may need updates.
