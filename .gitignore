@@ -2,3 +2,4 @@ dist/
 linkedin-job-page.html
 builtin-job-page.html
 .DS_Store
+build.sh

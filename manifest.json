@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobFilter - Company Blocklist",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hide job postings from companies you do not want to see on LinkedIn and Built In.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
